@@ -1,8 +1,17 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { pool } from '@/lib/database';
+import { DatabaseService, ensureDatabaseInitialized } from '@/lib/database';
+import { Pool } from 'pg';
 
 export async function GET(request: NextRequest) {
   try {
+    await ensureDatabaseInitialized();
+    
+    // Create a new pool connection for debugging
+    const pool = new Pool({
+      connectionString: process.env.DATABASE_URL,
+      ssl: { rejectUnauthorized: false }
+    });
+    
     const client = await pool.connect();
     
     try {
