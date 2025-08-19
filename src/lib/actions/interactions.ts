@@ -68,24 +68,25 @@ export async function getInteractions(
     }
     
     if (filters.caseId) {
-      whereConditions.push(`i.case_id = $${paramIndex++}`);
+      whereConditions.push(`c.id = $${paramIndex++}`);
       queryParams.push(filters.caseId);
     }
     
-    if (filters.interactionType && filters.interactionType.length > 0) {
-      whereConditions.push(`i.interaction_type = ANY($${paramIndex++})`);
-      queryParams.push(filters.interactionType);
-    }
+    // These columns don't exist in case_interactions table, skip them
+    // if (filters.interactionType && filters.interactionType.length > 0) {
+    //   whereConditions.push(`i.interaction_type = ANY($${paramIndex++})`);
+    //   queryParams.push(filters.interactionType);
+    // }
     
-    if (filters.priority && filters.priority.length > 0) {
-      whereConditions.push(`i.priority = ANY($${paramIndex++})`);
-      queryParams.push(filters.priority);
-    }
+    // if (filters.priority && filters.priority.length > 0) {
+    //   whereConditions.push(`i.priority = ANY($${paramIndex++})`);
+    //   queryParams.push(filters.priority);
+    // }
     
-    if (filters.status && filters.status.length > 0) {
-      whereConditions.push(`i.status = ANY($${paramIndex++})`);
-      queryParams.push(filters.status);
-    }
+    // if (filters.status && filters.status.length > 0) {
+    //   whereConditions.push(`i.status = ANY($${paramIndex++})`);
+    //   queryParams.push(filters.status);
+    // }
     
     if (filters.dateFrom) {
       whereConditions.push(`i.timestamp >= $${paramIndex++}`);
@@ -99,16 +100,17 @@ export async function getInteractions(
     
     if (filters.searchQuery) {
       whereConditions.push(`(
-        to_tsvector('english', i.situation || ' ' || i.action_taken || ' ' || i.outcome) 
+        to_tsvector('english', i.situation || ' ' || i.action || ' ' || i.outcome) 
         @@ plainto_tsquery('english', $${paramIndex++})
       )`);
       queryParams.push(filters.searchQuery);
     }
     
-    if (filters.tags && filters.tags.length > 0) {
-      whereConditions.push(`i.tags && $${paramIndex++}`);
-      queryParams.push(filters.tags);
-    }
+    // Tags column doesn't exist in case_interactions
+    // if (filters.tags && filters.tags.length > 0) {
+    //   whereConditions.push(`i.tags && $${paramIndex++})`);
+    //   queryParams.push(filters.tags);
+    // }
     
     // Add case-related filters
     if (filters.insuranceCompany) {
@@ -156,8 +158,7 @@ export async function getInteractions(
         c.rental_company as "rentalCompany"
       FROM case_interactions i
       LEFT JOIN cases c ON i.case_number = c.case_number
-      WHERE (c.is_deleted = false OR c.is_deleted IS NULL)
-      ${whereClause ? 'AND ' + whereClause : ''}
+      ${whereClause ? 'WHERE ' + whereClause : ''}
       ${orderBy}
       LIMIT $${paramIndex++} OFFSET $${paramIndex++}
     `;
@@ -174,20 +175,59 @@ export async function getInteractions(
       return { success: false, error: result.error };
     }
     
-    const interactions = result.data?.rows || [];
-    const hasMore = interactions.length > limit;
+    const rawInteractions = result.data?.rows || [];
+    const hasMore = rawInteractions.length > limit;
     
     if (hasMore) {
-      interactions.pop(); // Remove the extra record
+      rawInteractions.pop(); // Remove the extra record
     }
+    
+    // Map the raw data to InteractionFeedView format
+    const interactions = rawInteractions.map((row: any) => ({
+      // Basic interaction data from case_interactions table
+      id: row.id,
+      caseNumber: row.caseNumber,
+      caseId: row.caseId,
+      timestamp: row.timestamp,
+      
+      // Map the actual columns to expected fields
+      situation: row.situation,
+      actionTaken: row.action || '', // 'action' column mapped to 'actionTaken'
+      outcome: row.outcome,
+      
+      // Default values for fields that don't exist in our table
+      interactionType: 'note' as const,
+      priority: 'medium' as const,
+      status: 'completed' as const,
+      tags: [],
+      attachments: [],
+      
+      // User tracking
+      createdBy: row.source || 'System',
+      createdAt: row.createdAt,
+      updatedAt: row.updatedAt,
+      workspaceId: row.workspaceId,
+      
+      // Case details from joined cases table
+      caseHirerName: row.caseHirerName,
+      incidentDate: row.incidentDate,
+      caseStatus: row.caseStatus,
+      insuranceCompany: row.insuranceCompany,
+      lawyerAssigned: row.lawyerAssigned,
+      rentalCompany: row.rentalCompany,
+      
+      // Additional metadata
+      contactName: row.method || undefined,
+      createdByName: row.source,
+      createdByEmail: undefined
+    }))
     
     // Get total count for pagination info
     const countQuery = `
       SELECT COUNT(*) as total
       FROM case_interactions i
-      LEFT JOIN cases c ON i.case_id = c.id
-      WHERE (c.is_deleted = false OR c.is_deleted IS NULL)
-      ${whereClause ? 'AND ' + whereClause : ''}
+      LEFT JOIN cases c ON i.case_number = c.case_number
+      ${whereClause ? 'WHERE ' + whereClause : ''}
     `;
     
     const countResult = await executeQuery(countQuery, queryParams.slice(0, -2)); // Remove LIMIT and OFFSET params
