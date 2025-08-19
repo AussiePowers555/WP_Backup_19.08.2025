@@ -500,16 +500,12 @@ export default function CasesListClassic({
       
       // If workspace user, they should only see cases in their workspace
       if (currentUser?.role === 'workspace_user') {
-        // Workspace users see cases assigned to their workspace
+        // Workspace users see ALL cases assigned to their workspace
         const userWorkspaceId = currentUser.workspaceId || workspaceIdCtx;
         visibilityPassed = c.workspaceId === userWorkspaceId;
         
-        // Additional filter: if they have a contact ID, only show cases assigned to them
-        if (currentUser.contactId) {
-          visibilityPassed = visibilityPassed && 
-            (c.assigned_lawyer_id === currentUser.contactId || 
-             c.assigned_rental_company_id === currentUser.contactId);
-        }
+        // No additional filtering by contact assignment - show ALL workspace cases
+        // This ensures workspace users can see all cases in their workspace
       } else {
         // Admin/developer users: filter by active workspace context id. If undefined (Main) show all
         if (workspaceIdCtx) {
