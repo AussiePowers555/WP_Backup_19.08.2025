@@ -881,8 +881,8 @@ const PostgreSQLService = {
       const result = await client.query(`
         SELECT c.* FROM cases c 
         JOIN user_accounts u ON u.id = $1
-        WHERE (u.workspace_id IS NULL OR u.workspace_id = c.workspace_id)
-        ORDER BY c.created_at DESC
+        WHERE (u.workspace_id IS NULL OR c.workspace_id = u.workspace_id)
+        ORDER BY c.last_updated DESC
       `, [userId]);
       
       return result.rows.map(mapDbRowToCaseFrontend);
@@ -2744,6 +2744,47 @@ const PostgreSQLService = {
     } catch (error) {
       await client.query('ROLLBACK');
       throw error;
+    } finally {
+      client.release();
+    }
+  },
+
+  // Get all cases for a specific workspace
+  getCasesForWorkspace: async (workspaceId: string): Promise<CaseFrontend[]> => {
+    ensureServerSide();
+    const client = await pool!.connect();
+    
+    try {
+      const result = await client.query(`
+        SELECT * FROM cases 
+        WHERE workspace_id = $1
+        ORDER BY last_updated DESC
+      `, [workspaceId]);
+      
+      return result.rows.map(mapDbRowToCaseFrontend);
+    } finally {
+      client.release();
+    }
+  },
+
+  // Get interactions for multiple cases
+  getInteractionsForCases: async (caseNumbers: string[]): Promise<any[]> => {
+    ensureServerSide();
+    if (!caseNumbers || caseNumbers.length === 0) {
+      return [];
+    }
+    
+    const client = await pool!.connect();
+    
+    try {
+      const placeholders = caseNumbers.map((_, index) => `$${index + 1}`).join(', ');
+      const result = await client.query(`
+        SELECT * FROM case_interactions 
+        WHERE case_number IN (${placeholders})
+        ORDER BY timestamp DESC
+      `, caseNumbers);
+      
+      return result.rows;
     } finally {
       client.release();
     }

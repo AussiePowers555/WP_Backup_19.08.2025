@@ -6,6 +6,7 @@
     "dev": "next dev --turbopack -H 0.0.0.0 -p 3000",
     "dev:clear": "next dev --turbopack -H 0.0.0.0 -p 3000 --clear",
     "dev:replit": "next dev --turbopack -H 0.0.0.0 -p 3000",
+    "dev:safe": "next dev -H 0.0.0.0 -p 3002",
     "setup-local-ip": "node setup-local-ip.js",
     "dev:auto-restart": "node auto-restart-dev.js",
     "clean": "rimraf .next",

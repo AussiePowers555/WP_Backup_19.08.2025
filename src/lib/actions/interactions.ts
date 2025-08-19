@@ -48,9 +48,9 @@ export async function getInteractions(
     
     // Filter by workspace for all users (unless viewing MAIN/all)
     if (workspaceId && workspaceId !== 'MAIN') {
-      // Filter interactions by their workspace_id directly
-      // This ensures we get all interactions for the workspace regardless of case links
-      whereConditions.push(`i.workspace_id = $${paramIndex++}`);
+      // Filter interactions by the workspace_id of their associated case
+      // Join with cases table to get workspace filtering
+      whereConditions.push(`c.workspace_id = $${paramIndex++}`);
       queryParams.push(workspaceId);
     }
     
@@ -128,44 +128,34 @@ export async function getInteractions(
     
     const whereClause = whereConditions.length > 0 ? whereConditions.join(' AND ') : '';
     
-    // Build ORDER BY clause
+    // Build ORDER BY clause - using actual columns
     const orderBy = `ORDER BY i.${sort.field === 'timestamp' ? 'timestamp' : 
                                 sort.field === 'caseNumber' ? 'case_number' :
-                                sort.field === 'priority' ? 'priority' : 'status'} ${sort.direction.toUpperCase()}`;
+                                'timestamp'} ${sort.direction.toUpperCase()}`;
     
-    // Main query
+    // Main query - using actual columns from case_interactions table
     const query = `
       SELECT 
         i.id,
         i.case_number as "caseNumber",
-        i.case_id as "caseId",
-        i.interaction_type as "interactionType",
-        i.timestamp,
-        i.contact_name as "contactName",
-        i.contact_phone as "contactPhone",
-        i.contact_email as "contactEmail",
+        i.source,
+        i.method,
         i.situation,
-        i.action_taken as "actionTaken",
+        i.action,
         i.outcome,
-        i.priority,
-        i.status,
-        i.tags,
-        i.attachments,
-        i.created_by as "createdBy",
-        i.updated_by as "updatedBy",
+        i.timestamp,
         i.created_at as "createdAt",
         i.updated_at as "updatedAt",
-        i.workspace_id as "workspaceId",
+        c.id as "caseId",
+        c.workspace_id as "workspaceId",
         c.client_name as "caseHirerName",
         c.accident_date as "incidentDate",
         c.status as "caseStatus",
         c.client_insurance_company as "insuranceCompany",
         c.lawyer as "lawyerAssigned",
-        c.rental_company as "rentalCompany",
-        i.created_by as "createdByName",
-        i.created_by as "createdByEmail"
-      FROM interactions i
-      LEFT JOIN cases c ON i.case_id = c.id
+        c.rental_company as "rentalCompany"
+      FROM case_interactions i
+      LEFT JOIN cases c ON i.case_number = c.case_number
       WHERE (c.is_deleted = false OR c.is_deleted IS NULL)
       ${whereClause ? 'AND ' + whereClause : ''}
       ${orderBy}
@@ -194,7 +184,7 @@ export async function getInteractions(
     // Get total count for pagination info
     const countQuery = `
       SELECT COUNT(*) as total
-      FROM interactions i
+      FROM case_interactions i
       LEFT JOIN cases c ON i.case_id = c.id
       WHERE (c.is_deleted = false OR c.is_deleted IS NULL)
       ${whereClause ? 'AND ' + whereClause : ''}
@@ -416,7 +406,7 @@ export async function deleteInteraction(
   interactionId: number
 ): Promise<{ success: boolean; error?: string }> {
   try {
-    const query = 'DELETE FROM interactions WHERE id = $1';
+    const query = 'DELETE FROM case_interactions WHERE id = $1';
     const result = await executeQuery(query, [interactionId]);
     
     if (!result.success) {
@@ -463,7 +453,7 @@ export async function getInteractionById(
         i.updated_by as "updatedBy",
         i.created_at as "createdAt",
         i.updated_at as "updatedAt",
-        i.workspace_id as "workspaceId",
+        c.workspace_id as "workspaceId",
         c.client_name as "caseHirerName",
         c.accident_date as "incidentDate",
         c.status as "caseStatus",
@@ -472,7 +462,7 @@ export async function getInteractionById(
         c.rental_company as "rentalCompany",
         i.created_by as "createdByName",
         i.created_by as "createdByEmail"
-      FROM interactions i
+      FROM case_interactions i
       LEFT JOIN cases c ON i.case_id = c.id
       WHERE i.id = $1
     `;
@@ -523,7 +513,7 @@ export async function getRecentInteractions(
         i.status,
         c.client_name as "caseHirerName",
         i.created_by as "createdByName"
-      FROM interactions i
+      FROM case_interactions i
       LEFT JOIN cases c ON i.case_id = c.id
       WHERE (c.is_deleted = false OR c.is_deleted IS NULL)
       ${whereClause ? 'AND ' + whereClause : ''}

@@ -18,7 +18,10 @@ export async function GET(
 
     const { id: workspaceId } = await context.params;
 
-    // Get all users in the workspace
+    // Get all users in the workspace (exclude deleted users)
+    if (!db) {
+      throw new Error('Database not initialized');
+    }
     const result = await db.query(`
       SELECT 
         wu.id,
@@ -34,7 +37,7 @@ export async function GET(
         u.last_login
       FROM workspace_users wu
       JOIN user_accounts u ON wu.user_id = u.id
-      WHERE wu.workspace_id = $1 AND wu.is_active = true
+      WHERE wu.workspace_id = $1 AND wu.is_active = true AND u.status != 'deleted'
       ORDER BY wu.joined_at DESC
     `, [workspaceId]);
     
